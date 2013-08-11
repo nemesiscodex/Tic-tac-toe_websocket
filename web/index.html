@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Tateti</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Bootstrap -->
+    <link href="css/bootstrap.css" rel="stylesheet" media="screen">
+  </head>
+  <body>
+    <div class="container"> 
+		<h1> Tateti </h1>
+		<hr />
+		<div class ="page">
+		</div>
+	</div>
+	<!-- Templates -->
+	<!-- Formulario para cambiar el nombre -->
+	<script type="text/template" id="nombres-form">
+		<form class = "edit-user-form">
+			<legend>Nombre de los Jugadores</legend>
+			<label>Jugador</label> <input type="text" name="jugador" placeholder= "Jugador" />
+			<button type="submit" class = "btn nomBtn">Empezar!</button>
+		</form>
+	</script>
+	<!-- Tabla Tateti -->
+	<script type="text/template" id="tateti-table">
+        <h5><font color="<%= cColor %>"><%= ConnState + " " + ((tateti.id===true)?tateti.p1:((tateti.id===-1)?" ":tateti.p2)) %> </font></h5>
+        <div class="container">
+		<button class = "btn-primary nombre" id = "pnom" align="center">Cambiar Nombre de Jugadores</button>
+			<h4>Juega <%= tateti.ganador()%> <%= tateti.simbol(tateti.turno)%></h4>
+		</div>
+			<table align="center">
+				<tbody>
+				<% for(i=0;i<9;i++) {%>
+					<% if(i==0 || i==3 || i ==6){ %>
+					<tr>
+					<% }%>
+						<td class = "table-bordered td">
+							<button class = "btn tt" id = "<%= i %>" name="test">
+								<%= tateti.simbol(tateti.mat[i])%>
+							</button>
+						</td>
+					<% if(i==2 || i==5 || i ==8){ %>
+						</tr>
+					<% }%>
+				<% }%>
+				</tbody>
+
+			</table>
+			<div class="container" align="center">
+				<% if(tateti.end){ %>
+					<% if(tateti.empate){ %>
+					<h4>Empate!</h4>
+					<% }else{ if(tateti.ganador()===tateti.id) %>
+                        <h4>Ganaste!</h4>
+                    <% else %>
+					<h4>Gano <%= tateti.ganador() %>!</h4>
+					<% }%>
+					<button class = "btn-primary nuevo" id = "nuevo" align="center">Nuevo Juego</button>
+				<% }%>
+
+			</div>
+		</div>
+	</script>
+
+    <!-- JavaScript plugins (requires jQuery) -->
+    <script src="js/jquery.min.js"></script>
+    <!-- Include all compiled plugins (below), or include individual files as needed -->
+    <script src="js/underscore-min.js"></script>
+    <!-- Bootstrap, Backbone, y el backend de tateti -->
+    <script src="js/bootstrap.min.js"></script>
+    <script src="js/backbone.js"></script>
+    <script src="js/tateti.js"></script>
+
+    <!-- Funcionalidad -->
+    <script>
+    	<!-- Funcion Magica -->
+    	$.fn.serializeObject = function(){
+    		var o = {};
+    		var a =  this.serializeArray();
+    		$.each(a,function(){
+    			if(o[this.name] !== undefined){
+	    			if(!o[this.name].push){
+	    				o[this.name] = [o[this.name]];
+	    			}
+	    			o[this.name].push(this.value || '');
+	    		}else{
+	    			o[this.name] = this.value || '';
+	    		}
+
+    		});
+    		return o;
+    	}
+    	<!-- Fin de funcion Magica -->
+        var GameObject = function(tipo,nombre,jugador,jugada){
+            this.tipo = tipo;
+            this.nombre = nombre;
+            this.jugador = jugador;
+            this.jugada = jugada;
+        }
+        var cColor = "black";
+        var ConnState = "Conectando...";
+        var ws = new WebSocket("ws://localhost:8084/tateti/Server");
+        ws.onopen = function(){
+            ConnState = "Conectado "
+            cColor="179B00";
+            tablat.render();
+        };
+        ws.onmessage = function(message){
+                console.log(message.data);
+                var obj = eval('('+message.data+')');
+                console.log(obj);
+                switch(obj.tipo){
+                    case 0:
+                        tateti.id = obj.jugador;
+                        tateti.init();
+                        tablat.render();
+                        break;
+                    case 1:
+                        //jugada
+                        if(obj.jugador === tateti.turno)
+                            tateti.jugar(obj.jugada);
+                        tablat.render();
+                        break;
+                    case 2:
+                        //cambio de nombre
+                        if (obj.jugador === true)
+                            tateti.p1 = obj.nombre;
+                        else
+                            tateti.p2 = obj.nombre;
+                        tablat.render();
+                        break;
+                    case 3:
+                        //Jugador Abandono
+                        tateti.init();
+                        tablat.render();
+                        if(!tateti.id){
+                            alert("El jugador "+tateti.p1+" abandono el juego.");
+                            if(tateti.p2!=="Jugador 2")
+                                tateti.p1 = tateti.p2;
+                            else
+                                tateti.p1 = "Jugador 1";
+                        }else{
+                            alert("El jugador "+tateti.p2+" abandono el juego.")
+                        }
+                        tateti.p2 = "Jugador 2";
+                        tateti.id = true;
+                        tablat.render();
+                        break;
+                    case 4:
+                        //Juego Nuevo
+                        alert("Empezo un Juego nuevo.");
+                        tateti.init();
+                        tablat.render();
+                        break;
+                    case 5:
+                        //Nuevo Jugador Conectado
+                        console.log("Nuevo Jugador");
+                        alert("Se ha conectado un Jugador nuevo.");
+                        tateti.init();
+                        tablat.render();
+                        break;
+                    case -1:
+                        //Ya hay 2 jugadores.
+                        alert("Ya hay 2 jugadores. :(");
+                        closeConnect();
+                        break;
+                }
+        };
+        function postToServer(json){
+                ws.send(json);
+        }
+        function closeConnect(){
+                cColor="9A0312";
+                ws.close();
+                ConnState = "Desconectado."
+                tablat.render();
+        }
+    	var tateti = new Tabla();
+    	<!-- Routes ( en este caso home y otra para los nombres ) -->
+        var Router = Backbone.Router.extend({
+          routes: {
+            '':'home',
+            'nombre': 'nombres'
+          }
+
+        });
+
+        var router = new Router();
+        <!-- Vistas -->
+        <!-- Juego de tateti -->
+        var TablaTateti = Backbone.View.extend({
+    		el: '.page',
+    		render: function(){
+    			var temp = _.template($("#tateti-table").html(), tateti);
+    			this.$el.html(temp);
+    		},
+    		events: {
+    			'click .btn.tt' : 'jugar',
+    			'click .btn-primary.nuevo' : 'nuevo',
+    			'click .btn-primary.nombre' : 'nom'
+    		},
+    		jugar: function(ev){
+
+    			x = ev.currentTarget.attributes.id.nodeValue;
+    			console.log(x);
+                go = new GameObject(1,"",tateti.id,x);
+                ws.send(JSON.stringify(go));
+                //tateti.jugar(x);
+    			this.render();
+    		},
+    		nuevo: function(ev){
+    			go = new GameObject(4,"",false,-1);
+                ws.send(JSON.stringify(go));
+    		},
+    		nom: function(ev){
+    			router.navigate('nombre',{trigger: true});
+    		}
+
+    	});
+    	<!-- Cambio de Nombre -->
+    	var NombreP = Backbone.View.extend({
+    		el: '.page',
+    		render: function(){
+    			var temp = _.template($("#nombres-form").html(), tateti);
+    			this.$el.html(temp);
+    		},
+    		events: {
+    			'submit .edit-user-form': 'CambiarNombre'
+    		},
+    		CambiarNombre: function(ev){
+    			obj = $(ev.currentTarget).serializeObject();
+                go = new GameObject(2,obj.jugador,tateti.id,-1);
+    			ws.send(JSON.stringify(go));
+    			router.navigate('',{trigger: true});
+    			return false;
+    		}
+
+    	});
+        var tablat = new TablaTateti();
+        var nombrep = new NombreP();
+        <!-- Carga las paginas -->
+        router.on('route:home',function(){
+          tablat.render();
+        });
+
+        router.on('route:nombres',function(){
+          nombrep.render();
+        });
+        Backbone.history.start();
+
+
+    </script> 
+  </body>
+</html>
